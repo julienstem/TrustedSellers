@@ -5,7 +5,18 @@ import React, {
   useEffect,
   type ReactNode,
 } from "react";
-import type { Brand, Seller } from "../types/types";
+
+// --- Interfaces ---
+export interface Seller {
+  name: string;
+  url: string;
+  platform: "yupoo" | "weidian" | "taobao" | "other";
+}
+
+export interface Brand {
+  name: string;
+  sellers: Seller[];
+}
 
 export interface FashionRepsContextType {
   brands: Brand[];
@@ -14,7 +25,7 @@ export interface FashionRepsContextType {
   refetch: () => Promise<void>;
 }
 
-// Helper pour identifier la plateforme du vendeur depuis son lien
+// Détection automatique de la plateforme
 const detectPlatform = (url: string): Seller["platform"] => {
   if (url.includes("yupoo.com")) return "yupoo";
   if (url.includes("weidian.com") || url.includes("youshop10.com"))
@@ -23,10 +34,54 @@ const detectPlatform = (url: string): Seller["platform"] => {
   return "other";
 };
 
-const PROXY_URL = "https://api.allorigins.win/raw?url=";
+// Utilisation de corsproxy.io (alternative plus stable)
+const PROXY_URL = "https://corsproxy.io/?";
 const REDDIT_WIKI_URL = "https://www.reddit.com/r/FashionReps/wiki/trusted/";
 
-// Création du Context typé
+// Données de secours (Fallback) si le proxy est bloqué
+const FALLBACK_BRANDS: Brand[] = [
+  {
+    name: "Acne Studios",
+    sellers: [
+      {
+        name: "Mook",
+        url: "https://mook-official.x.yupoo.com/",
+        platform: "yupoo",
+      },
+      {
+        name: "Singor",
+        url: "https://steven-1989.x.yupoo.com/",
+        platform: "yupoo",
+      },
+      {
+        name: "TopBatch",
+        url: "https://topbatch.x.yupoo.com/",
+        platform: "yupoo",
+      },
+    ],
+  },
+  {
+    name: "Balenciaga",
+    sellers: [
+      {
+        name: "MadebyKungFu",
+        url: "https://madebykungfu.x.yupoo.com/",
+        platform: "yupoo",
+      },
+      {
+        name: "Carrotmade",
+        url: "https://carrotmade.x.yupoo.com/",
+        platform: "yupoo",
+      },
+      {
+        name: "Shark Breeder",
+        url: "https://k.youshop10.com/123456",
+        platform: "weidian",
+      },
+    ],
+  },
+];
+
 const FashionRepsContext = createContext<FashionRepsContextType | undefined>(
   undefined,
 );
@@ -57,15 +112,12 @@ export const FashionRepsProvider: React.FC<ProviderProps> = ({ children }) => {
       const doc = parser.parseFromString(htmlText, "text/html");
 
       const parsedBrands: Brand[] = [];
-
-      // Ciblage des titres de marques dans le DOM Reddit Wiki
       const headers = doc.querySelectorAll(".md h2, .md h3, .md p strong");
 
       headers.forEach((header) => {
         const brandName = header.textContent?.trim() || "";
         if (!brandName) return;
 
-        // Recherche de la table HTML associée
         let sibling = header.parentElement
           ? header.parentElement.nextElementSibling
           : null;
@@ -110,12 +162,16 @@ export const FashionRepsProvider: React.FC<ProviderProps> = ({ children }) => {
           }
         }
       });
-
       setBrands(parsedBrands);
     } catch (err) {
-      console.error("Erreur scraping FashionReps:", err);
+      console.warn(
+        "Échec du scraping direct (CORS/Réseau), basculement sur les données de secours.",
+        err,
+      );
+      // Fallback automatique pour ne pas casser l'application
+      setBrands(FALLBACK_BRANDS);
       setError(
-        err instanceof Error ? err.message : "Erreur inconnue lors du scraping",
+        "Impossible de joindre Reddit en direct (CORS). Affichage des données de secours.",
       );
     } finally {
       setLoading(false);
@@ -128,19 +184,13 @@ export const FashionRepsProvider: React.FC<ProviderProps> = ({ children }) => {
 
   return (
     <FashionRepsContext.Provider
-      value={{
-        brands,
-        loading,
-        error,
-        refetch: fetchAndParseSellers,
-      }}
+      value={{ brands, loading, error, refetch: fetchAndParseSellers }}
     >
       {children}
     </FashionRepsContext.Provider>
   );
 };
 
-// Hook personnalisé sécurisé
 export const useFashionReps = (): FashionRepsContextType => {
   const context = useContext(FashionRepsContext);
   if (!context) {
