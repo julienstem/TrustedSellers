@@ -1,0 +1,31 @@
+name: Auto-Scrape FashionReps Wiki
+
+on:
+  schedule:
+    - cron: "0 0 * * 1" # S'exécute tous les lundis à 00:00
+  workflow_dispatch: # Permet de le lancer manuellement depuis l'onglet Actions de GitHub
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le code du dépôt
+        uses: actions/checkout@v4
+
+      - name: Configurer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Lancer le script de scraping
+        run: node scripts/scrape.js
+
+      - name: Commit et push si le JSON a changé
+        run: |
+          git config --global user.name 'GitHub Action Bot'
+          git config --global user.email 'action@github.com'
+          git add src/fashionreps_trusted.json
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Mise à jour automatique de la liste des vendeurs [skip ci]" && git push)
